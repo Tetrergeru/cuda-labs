@@ -1,0 +1,2 @@
+#!/bin/bash
+nvcc  -O2  `pkg-config --cflags opencv4`  $1.cu  -o $1  `pkg-config --libs opencv4`
