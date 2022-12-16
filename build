@@ -1,2 +1,8 @@
 #!/bin/bash
-nvcc  -O2  `pkg-config --cflags opencv4`  $1.cu  -o $1  `pkg-config --libs opencv4`
+nvcc  -O2 `pkg-config --cflags opencv`  $(find ./ -name "*.cu")  -o cuda_labs -lopencv_core -lopencv_imgcodecs
+
+# sudo /opt/nvidia/nsight-compute/2019.4.0/nv-nsight-cu-cli \
+#     -o ./output.txt \
+#     --device 0 \
+#     --target-processes all \
+#     image_transpose
