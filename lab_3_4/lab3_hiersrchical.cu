@@ -7,28 +7,51 @@
 
 #define EPS 0.000001;
 
-__global__ void check_if_shifted(float *mat, float *shifted_mat, int width, int height, uint shift, unsigned char *result_mat)
+__global__ void check_if_shifted_hierarchical(float *mat, float *shifted_mat, int width, int height, uint shift, unsigned char *result_mat)
 {
     int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
 
-    int idx = y * width + x;
-
     if (x >= width || y >= height)
         return;
 
-    int shifted_idx = y * width + (x + shift) % width;
-    bool value = abs(mat[idx] - shifted_mat[shifted_idx]) < EPS;
+    __shared__ int number_of_errors;
 
-    result_mat[idx] = value;
+    if (threadIdx.x == 0 && threadIdx.y == 0)
+    {
+        number_of_errors = 0;
+    }
+    __syncthreads();
+
+    int idx = y * width + x;
+    int shifted_idx = y * width + (x + shift) % width;
+
+    int error = abs(mat[idx] - shifted_mat[shifted_idx]) >= EPS;
+
+    atomicAdd(&number_of_errors, error);
+    __syncthreads();
+
+    if (threadIdx.x == 0 && threadIdx.y == 0)
+    {
+        result_mat[blockIdx.x + blockIdx.y * gridDim.x] = number_of_errors == 0;
+    }
 }
 
-void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &shifted_mat, uint width, uint height, uint shift)
+void run_for_matrices_hierarchical(std::vector<float> &mat, std::vector<float> &shifted_mat, uint width, uint height, uint shift)
 {
-    auto result_mat = std::vector<unsigned char>(width * height);
+    auto block_width = 32u;
+    auto block_height = 1024u / block_width;
 
-    const float *host_mat = mat.data();
-    const float *host_shifted_mat = shifted_mat.data();
+    auto grid_width = (width + block_width - 1u) / block_width;
+    auto grid_height = (height + block_height - 1u) / block_height;
+
+    std::cout << "grid_width: " << grid_width << std::endl
+              << "grid_height: " << grid_height << std::endl;
+
+    auto result_mat = std::vector<unsigned char>(grid_width * grid_height);
+
+    float *host_mat = mat.data();
+    float *host_shifted_mat = shifted_mat.data();
     unsigned char *host_result_mat = result_mat.data();
 
     float *device_mat;
@@ -36,22 +59,16 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
     unsigned char *device_result_mat;
 
     std::cout << std::endl
-              << "Calculating..." << std::endl;
+              << "Calculating hierarchical..." << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
 
     CHECK(cudaMalloc(&device_mat, width * height * sizeof(float)));
     CHECK(cudaMalloc(&device_shifted_mat, width * height * sizeof(float)));
-    CHECK(cudaMalloc(&device_result_mat, width * height * sizeof(unsigned char)));
+    CHECK(cudaMalloc(&device_result_mat, grid_width * grid_height * sizeof(unsigned char)));
 
     CHECK(cudaMemcpy(device_mat, host_mat, width * height * sizeof(float), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(device_shifted_mat, host_shifted_mat, width * height * sizeof(float), cudaMemcpyHostToDevice));
-
-    auto block_width = 16u;
-    auto block_height = 16u;
-
-    auto grid_width = (width + block_width - 1u) / block_width;
-    auto grid_height = (height + block_height - 1u) / block_height;
 
     // Call kernell, measure time
 
@@ -63,7 +80,7 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
 
     cudaEventRecord(startCUDA, 0);
 
-    check_if_shifted<<<{grid_width, grid_height}, {block_width, block_height}>>>(device_mat, device_shifted_mat, width, height, shift, device_result_mat);
+    check_if_shifted_hierarchical<<<{grid_width, grid_height}, {block_width, block_height}>>>(device_mat, device_shifted_mat, width, height, shift, device_result_mat);
 
     cudaEventRecord(stopCUDA, 0);
     cudaEventSynchronize(stopCUDA);
@@ -73,19 +90,19 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
 
     // ==========================
 
-    CHECK(cudaMemcpy(host_result_mat, device_result_mat, width * height * sizeof(unsigned char), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(host_result_mat, device_result_mat, grid_width * grid_height * sizeof(unsigned char), cudaMemcpyDeviceToHost));
 
     CHECK(cudaFree(device_mat));
     CHECK(cudaFree(device_shifted_mat));
     CHECK(cudaFree(device_result_mat));
 
-    auto check = check_matrix(result_mat, width, height);
+    auto check = check_matrix(result_mat, grid_width, grid_height);
 
     auto stop = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<float> duration_total = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
 
-    // print_matrix(result_mat, width, height);
+    // print_matrix(result_mat, grid_width, grid_height);
 
     std::cout << std::endl
               << "result: " << (check ? "true" : "false") << std::endl
@@ -96,9 +113,9 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
               << "Total time: " << (double)duration_total.count() << " seconds" << std::endl;
 }
 
-void lab_3(int width = 256u, int height = 256u * 1024u)
+void lab3_hiersrchical(int width = 256u, int height = 256u * 1024u)
 {
-    auto shift = width / 2u;
+    auto shift = width / 2;
 
     std::cout << "Filling matrices..." << std::endl;
 
@@ -118,5 +135,5 @@ void lab_3(int width = 256u, int height = 256u * 1024u)
     std::cout << "mat: " << duration_1.count() << " seconds" << std::endl
               << "shifted_mat: " << duration_2.count() << " seconds" << std::endl;
 
-    run_for_matrices(mat, shifted_mat, width, height, shift);
+    run_for_matrices_hierarchical(mat, shifted_mat, width, height, shift);
 }

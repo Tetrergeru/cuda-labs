@@ -1,3 +1,6 @@
+#ifndef MATRICES_H
+#define MATRICES_H
+
 #include <vector>
 
 std::vector<float> generate_matrix(int width, int height);
@@ -19,15 +22,6 @@ void print_matrix(std::vector<T> const &vec, int width, int height)
     }
 }
 
-template <>
-void print_matrix(std::vector<unsigned char> const &vec, int width, int height)
-{
-    for (auto i = 0; i < height; i++)
-    {
-        for (auto j = 0; j < width; j++)
-        {
-            std::cout << (int)vec[i * width + j] << " ";
-        }
-        std::cout << std::endl;
-    }
-}
+void print_matrix(std::vector<unsigned char> const &vec, int width, int height);
+
+#endif

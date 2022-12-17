@@ -1,3 +1,6 @@
+#ifndef MAIN_H
+#define MAIN_H
+
 #include <iostream>
 
 #define CHECK(value)                                                             \
@@ -9,3 +12,5 @@
             exit(1);                                                             \
         }                                                                        \
     }
+
+#endif
