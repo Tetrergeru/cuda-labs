@@ -53,7 +53,25 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
     auto grid_width = (width + block_width - 1u) / block_width;
     auto grid_height = (height + block_height - 1u) / block_height;
 
+    // Call kernell, measure time
+
+    cudaEvent_t startCUDA, stopCUDA;
+    float elapsedTimeCUDA;
+
+    cudaEventCreate(&startCUDA);
+    cudaEventCreate(&stopCUDA);
+
+    cudaEventRecord(startCUDA, 0);
+
     check_if_shifted<<<{grid_width, grid_height}, {block_width, block_height}>>>(device_mat, device_shifted_mat, width, height, shift, device_result_mat);
+
+    cudaEventRecord(stopCUDA, 0);
+    cudaEventSynchronize(stopCUDA);
+    CHECK(cudaGetLastError());
+
+    cudaEventElapsedTime(&elapsedTimeCUDA, startCUDA, stopCUDA);
+
+    // ==========================
 
     CHECK(cudaMemcpy(host_result_mat, device_result_mat, width * height * sizeof(unsigned char), cudaMemcpyDeviceToHost));
 
@@ -61,28 +79,28 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
     CHECK(cudaFree(device_shifted_mat));
     CHECK(cudaFree(device_result_mat));
 
-    auto stop_gpu = std::chrono::high_resolution_clock::now();
-
     auto check = check_matrix(result_mat, width, height);
 
     auto stop = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<float> duration_total = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    std::chrono::duration<float> duration_gpu = std::chrono::duration_cast<std::chrono::microseconds>(stop_gpu - start);
 
     // print_matrix(result_mat, width, height);
 
     std::cout << std::endl
               << "result: " << (check ? "true" : "false") << std::endl
-              << "GPU time: " << (double)duration_gpu.count() << " seconds" << std::endl
-              << "GPU + CPU time: " << (double)duration_total.count() << " seconds" << std::endl;
+              << "CUDA time: " << elapsedTimeCUDA * 0.001 << " seconds" << std::endl
+              << "CUDA memory throughput: "
+              << ((sizeof(float) * 2 + sizeof(unsigned char)) * width * height) / elapsedTimeCUDA / 1024 / 1024 / 1.024
+              << " Gb/s" << std::endl
+              << "Total time: " << (double)duration_total.count() << " seconds" << std::endl;
 }
 
 void lab_3()
 {
-    auto width = 300u;
-    auto height = width * 1000u;;
-    auto shift = 1u;
+    auto width = 256u;
+    auto height = width * 1024u;
+    auto shift = 16u;
 
     std::cout << "Filling matrices..." << std::endl;
 
