@@ -4,14 +4,14 @@
 
 std::vector<float> generate_matrix(int width, int height)
 {
+    std::default_random_engine generator;
     auto vec = std::vector<float>(width * height);
 
-    std::random_device rd;
     auto dis = std::uniform_real_distribution<float>();
 
     for (auto i = 0; i < width * height; i++)
     {
-        vec[i] = dis(rd);
+        vec[i] = dis(generator);
     }
 
     return vec;

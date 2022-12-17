@@ -14,6 +14,9 @@ __global__ void check_if_shifted(float *mat, float *shifted_mat, int width, int 
 
     int idx = y * width + x;
 
+    if (x >= width || y >= height)
+        return;
+
     int shifted_idx = y * width + (x + shift) % width;
     bool value = abs(mat[idx] - shifted_mat[shifted_idx]) < EPS;
 
@@ -32,6 +35,9 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
     float *device_shifted_mat;
     unsigned char *device_result_mat;
 
+    std::cout << std::endl
+              << "Calculating..." << std::endl;
+
     auto start = std::chrono::high_resolution_clock::now();
 
     CHECK(cudaMalloc(&device_mat, width * height * sizeof(float)));
@@ -41,7 +47,13 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
     CHECK(cudaMemcpy(device_mat, host_mat, width * height * sizeof(float), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(device_shifted_mat, host_shifted_mat, width * height * sizeof(float), cudaMemcpyHostToDevice));
 
-    check_if_shifted<<<{width, height}, 1>>>(device_mat, device_shifted_mat, width, height, shift, device_result_mat);
+    auto block_width = 16u;
+    auto block_height = 16u;
+
+    auto grid_width = (width + block_width - 1u) / block_width;
+    auto grid_height = (height + block_height - 1u) / block_height;
+
+    check_if_shifted<<<{grid_width, grid_height}, {block_width, block_height}>>>(device_mat, device_shifted_mat, width, height, shift, device_result_mat);
 
     CHECK(cudaMemcpy(host_result_mat, device_result_mat, width * height * sizeof(unsigned char), cudaMemcpyDeviceToHost));
 
@@ -49,26 +61,46 @@ void run_for_matrices(std::vector<float> const &mat, std::vector<float> const &s
     CHECK(cudaFree(device_shifted_mat));
     CHECK(cudaFree(device_result_mat));
 
+    auto stop_gpu = std::chrono::high_resolution_clock::now();
+
     auto check = check_matrix(result_mat, width, height);
 
     auto stop = std::chrono::high_resolution_clock::now();
 
-    std::chrono::duration<float> duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
-    std::chrono::duration<float> duration_ms = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    std::chrono::duration<float> duration_total = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    std::chrono::duration<float> duration_gpu = std::chrono::duration_cast<std::chrono::microseconds>(stop_gpu - start);
 
-    std::cout << check << std::endl;
-    std::cout << duration.count() << " seconds" << std::endl;
-    std::cout << duration_ms.count() << " microseconds" << std::endl;
+    // print_matrix(result_mat, width, height);
+
+    std::cout << std::endl
+              << "result: " << (check ? "true" : "false") << std::endl
+              << "GPU time: " << (double)duration_gpu.count() << " seconds" << std::endl
+              << "GPU + CPU time: " << (double)duration_total.count() << " seconds" << std::endl;
 }
 
 void lab_3()
 {
     auto width = 300u;
-    auto height = 30000u;
-    auto shift = 100u;
+    auto height = width * 1000u;;
+    auto shift = 1u;
+
+    std::cout << "Filling matrices..." << std::endl;
+
+    auto start = std::chrono::high_resolution_clock::now();
 
     auto mat = generate_matrix(width, height);
+
+    auto stop_1 = std::chrono::high_resolution_clock::now();
+
     auto shifted_mat = cyclic_shift(mat, width, height, shift);
+
+    auto stop_2 = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<float> duration_1 = std::chrono::duration_cast<std::chrono::microseconds>(stop_1 - start);
+    std::chrono::duration<float> duration_2 = std::chrono::duration_cast<std::chrono::microseconds>(stop_2 - start);
+
+    std::cout << "mat: " << duration_1.count() << " seconds" << std::endl
+              << "shifted_mat: " << duration_2.count() << " seconds" << std::endl;
 
     run_for_matrices(mat, shifted_mat, width, height, shift);
 }
