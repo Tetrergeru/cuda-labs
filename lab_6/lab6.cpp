@@ -5,6 +5,8 @@
 #define CL_HPP_CL_1_2_DEFAULT_BUILD
 
 #include <CL/opencl.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 #include "lab6.h"
 
@@ -14,6 +16,17 @@
 
 using namespace cl;
 using namespace std;
+
+cv::Mat LoadImage(std::string const &fname)
+{
+    auto image = cv::imread(fname, cv::IMREAD_COLOR);
+    if (!image.data)
+    {
+        cout << "Could not open or find the image" << std::endl;
+        throw -1;
+    }
+    return image;
+}
 
 class cl_ctx
 {
@@ -95,53 +108,61 @@ public:
             throw e;
         }
     }
-
-    void create_buffer()
-    {
-    }
 };
 
 std::string sourceString = R"(
-    __kernel void sum(__global float *a, __global float *b, __global float *c, int N)
-    {
-        int  id = get_global_id(0);
-        int threadsNum = get_global_size(0);
-        for (int i = id; i < N; i += threadsNum)
-            c[i] = a[i]+b[i];
-    }
-)";
-
-void lab_6_run_for_pointers(float *host_a, float *host_b, float *host_c, int N)
+__kernel void swap(__global uchar *in, __global uchar *out, int width, int height)
 {
+    int idx = get_global_id(0);
+
+    int i = idx * 3;
+    if (i >= width * height * 3) return;
+
+    int y = idx % width;
+    int x = idx / width;
+
+    int j = (y * height + x) * 3;
+
+    for (int di = 0; di < 3; di++)
+    {
+        out[j + di] = in[i + di];
+    }
+})";
+
+void lab_6_run_for_pointers(unsigned char *host_in, unsigned char *host_out, int width, int height)
+{
+    cl::size_type buffer_size = width * height * sizeof(unsigned char) * 3;
+
     auto ctx = cl_ctx();
     auto program = ctx.create_program(sourceString);
 
     // Buffers
 
     cl_int errcode;
-    auto dev_a = Buffer(ctx.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, N * sizeof(float), host_a, &errcode);
-    auto dev_b = Buffer(ctx.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, N * sizeof(float), host_b, &errcode);
-    auto dev_c = Buffer(ctx.context, CL_MEM_READ_WRITE, N * sizeof(float), NULL, &errcode);
+    auto dev_in = cl::Buffer(ctx.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, buffer_size, host_in, &errcode);
+    auto dev_out = cl::Buffer(ctx.context, CL_MEM_READ_WRITE, buffer_size, NULL, &errcode);
 
     // Args
 
-    auto sum = cl::Kernel(program, "sum");
-    sum.setArg(0, dev_a);
-    sum.setArg(1, dev_b);
-    sum.setArg(2, dev_c);
-    sum.setArg(3, N);
+    auto sum = cl::Kernel(program, "swap");
+    sum.setArg(0, dev_in);
+    sum.setArg(1, dev_out);
+    sum.setArg(2, width);
+    sum.setArg(3, height);
 
     // Running with event
     auto run_event = Event();
     clock_t t0 = clock();
 
-    ctx.queue.enqueueNDRangeKernel(sum, NullRange, NDRange(12 * 1024), NullRange, NULL, &run_event);
+    auto local = 128;
+
+    ctx.queue.enqueueNDRangeKernel(sum, NullRange, NDRange(width * height), NDRange(local), NULL, &run_event);
     run_event.wait();
 
     clock_t t1 = clock();
 
     auto retrieve_event = Event();
-    ctx.queue.enqueueReadBuffer(dev_c, true, 0, N * sizeof(float), host_c, NULL, &retrieve_event);
+    ctx.queue.enqueueReadBuffer(dev_out, true, 0, buffer_size, host_out, NULL, &retrieve_event);
     retrieve_event.wait();
 
     // Get profiling info
@@ -163,23 +184,22 @@ void lab_6_run_for_pointers(float *host_a, float *host_b, float *host_c, int N)
 
     // Calc throughput
 
-    cout << "GPU sum time = " << elapsedTimeGPU * 1000 << " ms\n";
-    cout << "GPU memory throughput = " << 3 * N * sizeof(float) / elapsedTimeGPU / 1024 / 1024 / 1024 << " Gb/s\n";
+    cout << "GPU swap time = " << elapsedTimeGPU * 1000 << " ms\n";
+    cout << "GPU memory throughput = " << buffer_size / elapsedTimeGPU / 1024 / 1024 / 1024 << " Gb/s\n";
 }
 
 void lab_6(std::string const &fname)
 {
-    int N = 10 * 1000 * 1000;
+    auto image = LoadImage(fname);
+    auto width = image.cols;
+    auto height = image.rows;
 
-    auto host_a = new float[N];
-    auto host_b = new float[N];
-    auto host_c = new float[N];
+    auto result = cv::Mat(width, height, CV_8UC3);
 
-    for (int i = 0; i < N; i++)
-    {
-        host_a[i] = i;
-        host_b[i] = 2 * i;
-    }
+    unsigned char *host_in = image.ptr();
+    unsigned char *host_out = result.ptr();
 
-    lab_6_run_for_pointers(host_a, host_b, host_c, N);
+    lab_6_run_for_pointers(host_in, host_out, width, height);
+
+    cv::imwrite("pic2.jpg", result);
 }
