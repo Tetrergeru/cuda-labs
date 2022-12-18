@@ -4,7 +4,7 @@
 #define CL_TARGET_OPENCL_VERSION 120
 #define CL_HPP_CL_1_2_DEFAULT_BUILD
 
-#include <CL/opencl.hpp>
+#include <CL/cl2.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
@@ -32,8 +32,10 @@ cv::Mat LoadImage(std::string const &fname)
 std::string source_string_swaps = R"(
 __kernel void swap(__global uchar *in, __global uchar *out, int width, int height)
 {
-    int x = get_global_id(0);
-    int y = get_global_id(1);
+    int idx = get_global_id(0);
+
+    int x = idx % width;
+    int y = idx / width;
 
     if (x >= width || y >= height) return;
 
@@ -61,6 +63,7 @@ void lab_6_run_for_pointers(unsigned char *host_in, unsigned char *host_out, int
 
     // Args
 
+    cout << "Creating kernel..." << endl;
     auto sum = cl::Kernel(program, "swap");
     sum.setArg(0, dev_in);
     sum.setArg(1, dev_out);
@@ -68,12 +71,21 @@ void lab_6_run_for_pointers(unsigned char *host_in, unsigned char *host_out, int
     sum.setArg(3, height);
 
     // Running with event
+    cout << "Running..." << endl;
     auto run_event = Event();
     clock_t t0 = clock();
 
-    auto local = 16;
+    auto local = 4;
 
-    ctx.queue.enqueueNDRangeKernel(sum, NullRange, NDRange(width, height), NDRange(local, local), NULL, &run_event);
+    try
+    {
+        ctx.queue.enqueueNDRangeKernel(sum, NullRange, NDRange(width * height), NDRange(local), NULL, &run_event);
+    }
+    catch (cl::Error e)
+    {
+        cout << "Error id: " << e.err() << endl;
+        throw e;
+    }
     run_event.wait();
 
     clock_t t1 = clock();

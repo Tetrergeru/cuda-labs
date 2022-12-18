@@ -1,2 +1,2 @@
 #!/bin/bash
-g++ `pkg-config --cflags opencv4` -O2  $(find ./ -name "*.cpp")  -o cl_labs -lopencv_core -lopencv_imgcodecs -lOpenCL
+g++ `pkg-config --cflags opencv` -O2  $(find ./ -name "*.cpp")  -o cl_labs -lopencv_core -lopencv_imgcodecs -lOpenCL
