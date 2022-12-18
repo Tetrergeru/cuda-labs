@@ -2,7 +2,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <iostream>
 
-#include "../main.h"
+#include "../cuda_main.h"
 
 using namespace cv;
 using namespace std;
@@ -10,19 +10,19 @@ using namespace std;
 __global__ void swap_simple(uchar *in, uchar *out, int width, int height)
 {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    int i = idx * 3;
 
-    int column = idx % width;
-    int row = idx / width;
+    int x = idx % width;
+    int y = idx / width;
 
-    int j = (column * height + row) * 3;
+    if (x >= width || y >= height)
+        return;
 
-    if (i < width * height * 3)
+    int i = (y * width + x) * 3;
+    int j = (x * height + y) * 3;
+
+    for (int di = 0; di < 3; di++)
     {
-        for (auto di = 0; di < 3; di++)
-        {
-            out[j + di] = in[i + di];
-        }
+        out[j + di] = in[i + di];
     }
 }
 
@@ -73,9 +73,28 @@ void lab_1()
     CHECK(cudaMalloc(&dev_in, width * height * 3))
     CHECK(cudaMalloc(&dev_out, width * height * 3))
 
+    // Call kernell, measure time
+
     CHECK(cudaMemcpy(dev_in, host_in, width * height * 3, cudaMemcpyHostToDevice));
 
-    swap_simple<<<(width * height * 3 + 511) / 512, 512>>>(dev_in, dev_out, width, height);
+    cudaEvent_t startCUDA, stopCUDA;
+    float elapsedTimeCUDA;
+
+    cudaEventCreate(&startCUDA);
+    cudaEventCreate(&stopCUDA);
+
+    cudaEventRecord(startCUDA, 0);
+
+    auto block_size = 256;
+    auto grid_size = (width * height + block_size - 1) / block_size;
+
+    swap_simple<<<grid_size, block_size>>>(dev_in, dev_out, width, height);
+
+    cudaEventRecord(stopCUDA, 0);
+    cudaEventSynchronize(stopCUDA);
+    CHECK(cudaGetLastError());
+
+    cudaEventElapsedTime(&elapsedTimeCUDA, startCUDA, stopCUDA);
 
     CHECK(cudaMemcpy(host_out, dev_out, width * height * 3, cudaMemcpyDeviceToHost));
 
@@ -86,5 +105,9 @@ void lab_1()
 
     imwrite("pic2.jpg", result);
 
-    cout << width << "  " << height << " -||- " << result.cols << "  " << result.rows << endl;
+    std::cout << std::endl
+              << "CUDA time: " << elapsedTimeCUDA * 0.001 << " seconds" << std::endl
+              << "CUDA memory throughput: "
+              << (2 * 3 * sizeof(unsigned char) * width * height) / elapsedTimeCUDA / 1024 / 1024 / 1.024
+              << " Gb/s" << std::endl;
 }

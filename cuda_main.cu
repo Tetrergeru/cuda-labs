@@ -5,11 +5,13 @@
 
 int main()
 {
-    auto width = 2u * 256u;
-    auto height = 256u * 1024u;
+    // auto width = 2u * 256u;
+    // auto height = 256u * 1024u;
 
-    lab_3(width, height);
-    std::cout << std::endl;
-    lab3_hiersrchical(width, height);
+    // lab_3(width, height);
+    // std::cout << std::endl;
+    // lab3_hiersrchical(width, height);
+
+    lab_1();
     return 0;
 }

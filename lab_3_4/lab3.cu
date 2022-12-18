@@ -3,7 +3,7 @@
 #include <chrono>
 
 #include "matrices.h"
-#include "../main.h"
+#include "../cuda_main.h"
 
 #define EPS 0.000001;
 
