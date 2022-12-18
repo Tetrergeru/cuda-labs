@@ -113,15 +113,13 @@ public:
 std::string sourceString = R"(
 __kernel void swap(__global uchar *in, __global uchar *out, int width, int height)
 {
-    int idx = get_global_id(0);
+    int x = get_global_id(0);
+    int y = get_global_id(1);
 
-    int i = idx * 3;
-    if (i >= width * height * 3) return;
+    if (x >= width || y >= height) return;
 
-    int y = idx % width;
-    int x = idx / width;
-
-    int j = (y * height + x) * 3;
+    int i = (y * width + x) * 3;
+    int j = (x * height + y) * 3;
 
     for (int di = 0; di < 3; di++)
     {
@@ -154,9 +152,9 @@ void lab_6_run_for_pointers(unsigned char *host_in, unsigned char *host_out, int
     auto run_event = Event();
     clock_t t0 = clock();
 
-    auto local = 128;
+    auto local = 16;
 
-    ctx.queue.enqueueNDRangeKernel(sum, NullRange, NDRange(width * height), NDRange(local), NULL, &run_event);
+    ctx.queue.enqueueNDRangeKernel(sum, NullRange, NDRange(width, height), NDRange(local, local), NULL, &run_event);
     run_event.wait();
 
     clock_t t1 = clock();
