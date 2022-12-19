@@ -18,7 +18,7 @@ __global__ void swap_simple(uchar *in, uchar *out, int width, int height)
         return;
 
     int i = (y * width + x) * 3;
-    int j = (x * height + y) * 3;
+    int j = ((height - y) * width + x) * 3;
 
     for (int di = 0; di < 3; di++)
     {
@@ -62,7 +62,7 @@ void lab_1()
     auto width = image.cols;
     auto height = image.rows;
 
-    auto result = Mat(width, height, CV_8UC3);
+    auto result = Mat(height, width, CV_8UC3);
 
     uchar *host_in = image.ptr();
     uchar *host_out = result.ptr();
@@ -85,7 +85,7 @@ void lab_1()
 
     cudaEventRecord(startCUDA, 0);
 
-    auto block_size = 256;
+    auto block_size = 1024;
     auto grid_size = (width * height + block_size - 1) / block_size;
 
     swap_simple<<<grid_size, block_size>>>(dev_in, dev_out, width, height);
