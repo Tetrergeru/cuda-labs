@@ -10,10 +10,13 @@
 
 int main()
 {
-    // lab_6(std::string("pic.jpg"));
+    std::cout << "Lab 6: (opencl)" << std::endl;
+    lab_6(std::string("pic.jpg"));
+
+    std::cout << std::endl
+              << "Lab 3: (opencl)" << std::endl;
     auto width = 2u * 256u;
     auto height = 256u * 1024u;
-    
     lab_3_cl(width, height);
 
     return 0;

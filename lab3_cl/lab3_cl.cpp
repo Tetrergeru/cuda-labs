@@ -4,7 +4,7 @@
 #define CL_TARGET_OPENCL_VERSION 120
 #define CL_HPP_CL_1_2_DEFAULT_BUILD
 
-#include <CL/opencl.hpp>
+#include <CL/cl2.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
